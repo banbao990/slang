@@ -1239,9 +1239,6 @@ Compound Capabilities
 `raytracingstages_fragment`
 > Collection of shader stages
 
-`ser`
-> Capabilities needed for shader-execution-reordering
-
 `ser_any_closesthit_intersection_miss`
 > Collection of capabilities for raytracing + shader execution reordering and the shader stages of anyhit, closesthit, intersection, and miss.
 
@@ -1250,6 +1247,10 @@ Compound Capabilities
 
 `ser_anyhit_closesthit_intersection`
 > Collection of capabilities for raytracing + shader execution reordering and the shader stages of anyhit, closesthit, and intersection.
+
+`ser_dxr_1_3`
+> Capabilities needed for shader-execution-reordering
+> DXR 1.3 standard SER (cross-vendor, requires SM 6.9+ for raytracing devices)
 
 `ser_motion`
 > Capabilities needed for shader-execution-reordering and motion-blur
@@ -1481,3 +1482,13 @@ Other
 
 `optix_multilevel_traversal`
 > Represents capabilities required for optix multi-level traversal support.
+
+`ser`
+> Unified SER capability (cross-vendor default + vendor extensions)
+> DXR 1.3 has implicit higher rank due to higher SM version requirement
+
+`ser_nvapi`
+> NVAPI-specific SER (vendor extension)
+
+`ser_vulkan_nv`
+> Vulkan NV SER extension (vendor extension)

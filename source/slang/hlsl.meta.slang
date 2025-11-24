@@ -17784,6 +17784,19 @@ $}
 // Numbering follows the sections in the "D3D12 Raytracing Functional Spec" v0.09 (2018-03-12)
 //
 
+/// https://microsoft.github.io/DirectX-Specs/d3d/Raytracing.html#rayquery-flags
+/// @category raytracing
+typedef uint RAYQUERY_FLAG;
+
+/// No options selected
+/// @category raytracing
+static const RAYQUERY_FLAG RAYQUERY_FLAG_NONE = 0x00;
+
+/// Flag to specify rayquery object supports Opacity Micromaps.
+/// @category raytracing
+static const RAYQUERY_FLAG RAYQUERY_FLAG_ALLOW_OPACITY_MICROMAPS = 0x01;
+
+
 // 10.1.1 - Ray Flags
 
 /// Flags that control ray traversal behavior and shader execution.
@@ -17833,6 +17846,10 @@ static const RAY_FLAG RAY_FLAG_SKIP_TRIANGLES = 0x100;
 /// Skips all procedural primitive intersections.
 /// @category raytracing
 static const RAY_FLAG RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES = 0x200;
+
+/// Forces unknown opaque and unknown transparent as opaque and transparent during traversal.
+/// @category raytracing
+static const RAY_FLAG RAY_FLAG_FORCE_OMM_2_STATE = 0x400;
 
 // 10.1.2 - Ray Description Structure
 /// Describes a ray for traversal through an acceleration structure.
@@ -20679,7 +20696,7 @@ struct HitObject
         /// Executes ray traversal (including anyhit and intersection shaders) like TraceRay, but returns the
         /// resulting hit information as a HitObject and does not trigger closesthit or miss shaders.
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     static HitObject TraceRay<payload_t>(
         RaytracingAccelerationStructure AccelerationStructure,
         uint RayFlags,
@@ -20773,7 +20790,7 @@ struct HitObject
         /// Executes motion ray traversal (including anyhit and intersection shaders) like TraceRay, but returns the
         /// resulting hit information as a HitObject and does not trigger closesthit or miss shaders.
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_motion_raygen_closesthit_miss)]
+    [require(ser_motion_raygen_closesthit_miss)]
     static HitObject TraceMotionRay<payload_t>(
         RaytracingAccelerationStructure AccelerationStructure,
         uint RayFlags,
@@ -20873,7 +20890,7 @@ struct HitObject
         /// Attributes parameter must either be an attribute struct, such as
         /// BuiltInTriangleIntersectionAttributes, or another HitObject to copy the attributes from.
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     static HitObject MakeHit<attr_t>(
         RaytracingAccelerationStructure AccelerationStructure,
         uint InstanceIndex,
@@ -20959,7 +20976,7 @@ struct HitObject
         /// See MakeHit but handles Motion
         /// Currently only supported on VK
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_motion_raygen_closesthit_miss)]
+    [require(ser_motion_raygen_closesthit_miss)]
     static HitObject MakeMotionHit<attr_t>(
         RaytracingAccelerationStructure AccelerationStructure,
         uint InstanceIndex,
@@ -21042,7 +21059,7 @@ struct HitObject
         /// attribute struct, such as BuiltInTriangleIntersectionAttributes, or another HitObject to copy the
         /// attributes from.
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     static HitObject MakeHit<attr_t>(
         uint HitGroupRecordIndex,
         RaytracingAccelerationStructure AccelerationStructure,
@@ -21188,12 +21205,29 @@ struct HitObject
         }
     }
 
-        /// Creates a HitObject representing a miss based on values explicitly passed as arguments, without
-        /// tracing a ray. The provided shader table index must reference a valid miss record in the shader
-        /// table.
+        /// DXR 1.3: Creates a HitObject representing a miss based on values explicitly passed as arguments,
+        /// without tracing a ray. The provided shader table index must reference a valid miss record in the shader table.
+        /// NOTE: RayFlags parameter is REQUIRED in DXR 1.3 (first parameter)
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    static HitObject MakeMiss(
+        uint RayFlags,
+        uint MissShaderIndex,
+        RayDesc Ray)
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm "($3 = HitObject::MakeMiss($0, $1, $2))";
+        }
+    }
+
+        /// LEGACY NVAPI: MakeMiss without RayFlags (for backward compatibility)
+        /// Use the 3-parameter version above for DXR 1.3 compliance
     [__requiresNVAPI]
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_nvapi)]
+    [require(ser_vulkan_nv)]
+    [require(cuda)]
     static HitObject MakeMiss(
         uint MissShaderIndex,
         RayDesc Ray)
@@ -21229,7 +21263,7 @@ struct HitObject
         /// See MakeMiss but handles Motion
         /// Currently only supported on VK
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_motion_raygen_closesthit_miss)]
+    [require(ser_motion_raygen_closesthit_miss)]
     static HitObject MakeMotionMiss(
         uint MissShaderIndex,
         RayDesc Ray,
@@ -21273,7 +21307,7 @@ struct HitObject
         /// miss.
     [__requiresNVAPI]
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     static HitObject MakeNop()
     {
         __target_switch
@@ -21294,6 +21328,36 @@ struct HitObject
         }
     }
 
+        /// DXR 1.3: Construct HitObject from RayQuery committed hit (basic overload)
+        /// Returns NOP if no hit committed. Not bound to shader table by default.
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    static HitObject FromRayQuery<let rayFlags : int = 0>(
+        RayQuery<rayFlags> Query)
+    {
+        __target_switch
+        {
+        case hlsl:
+            __intrinsic_asm "($1 = HitObject::FromRayQuery($0))";
+        }
+    }
+
+        /// DXR 1.3: Construct HitObject from RayQuery with custom procedural attributes
+        /// For COMMITTED_PROCEDURAL_PRIMITIVE_HIT only. Ignored for triangle hits.
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    static HitObject FromRayQuery<let rayFlags : int = 0, attr_t>(
+        RayQuery<rayFlags> Query,
+        uint CommittedCustomHitKind,
+        attr_t CommittedCustomAttribs)
+    {
+        __target_switch
+        {
+        case hlsl:
+            __intrinsic_asm "($3 = HitObject::FromRayQuery($0, $1, $2))";
+        }
+    }
+
     [require(hlsl, ser)]
     __generic<payload_t>
     static void __InvokeHLSL(
@@ -21311,7 +21375,7 @@ struct HitObject
         /// shader is invoked.
     [__requiresNVAPI]
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     static void Invoke<payload_t>(
         RaytracingAccelerationStructure AccelerationStructure,
         HitObject HitOrMiss,
@@ -21364,7 +21428,7 @@ struct HitObject
         /// Returns true if the HitObject encodes a miss, otherwise returns false.
     [__requiresNVAPI]
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     bool IsMiss()
     {
         __target_switch
@@ -21385,7 +21449,7 @@ struct HitObject
         /// Returns true if the HitObject encodes a hit, otherwise returns false.
     [__requiresNVAPI]
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     bool IsHit()
     {
         __target_switch
@@ -21406,7 +21470,7 @@ struct HitObject
         /// Returns true if the HitObject encodes a nop, otherwise returns false.
     [__requiresNVAPI]
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     bool IsNop()
     {
         __target_switch
@@ -21424,10 +21488,12 @@ struct HitObject
         }
     }
 
-        /// Queries ray properties from HitObject. Valid if the hit object represents a hit or a miss.
+        /// LEGACY: Queries ray properties from HitObject. Valid if the hit object represents a hit or a miss.
+        /// For DXR 1.3, use the individual getters: GetRayFlags(), GetRayTMin(), GetRayTCurrent(),
+        /// GetWorldRayOrigin(), GetWorldRayDirection()
     [__requiresNVAPI]
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     RayDesc GetRayDesc()
     {
         __target_switch
@@ -21454,11 +21520,71 @@ struct HitObject
         }
     }
 
+        /// DXR 1.3: Returns ray flags associated with the hit object
+        /// Returns 0 if NOP-HitObject
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    uint GetRayFlags()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetRayFlags";
+        }
+    }
+
+        /// DXR 1.3: Returns parametric starting point for the ray
+        /// Returns 0 if NOP-HitObject
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    float GetRayTMin()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetRayTMin";
+        }
+    }
+
+        /// DXR 1.3: Returns parametric ending point for the ray
+        /// For miss, returns the maximum initially specified. Returns 0 if NOP-HitObject
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    float GetRayTCurrent()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetRayTCurrent";
+        }
+    }
+
+        /// DXR 1.3: Returns world-space origin for the ray
+        /// Returns (0,0,0) if NOP-HitObject
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    float3 GetWorldRayOrigin()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetWorldRayOrigin";
+        }
+    }
+
+        /// DXR 1.3: Returns world-space direction for the ray
+        /// Returns (0,0,0) if NOP-HitObject
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    float3 GetWorldRayDirection()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetWorldRayDirection";
+        }
+    }
+
         /// Queries shader table index from HitObject. Valid if the hit object represents a hit or a miss.
     [__requiresNVAPI]
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     uint GetShaderTableIndex()
     {
         __target_switch
@@ -21492,7 +21618,7 @@ struct HitObject
     [__requiresNVAPI]
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     uint GetInstanceIndex()
     {
         __target_switch
@@ -21514,7 +21640,7 @@ struct HitObject
     [__requiresNVAPI]
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     uint GetInstanceID()
     {
         __target_switch
@@ -21536,7 +21662,7 @@ struct HitObject
     [__requiresNVAPI]
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     uint GetGeometryIndex()
     {
         __target_switch
@@ -21558,7 +21684,7 @@ struct HitObject
     [__requiresNVAPI]
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     uint GetPrimitiveIndex()
     {
         __target_switch
@@ -21580,7 +21706,7 @@ struct HitObject
     [__requiresNVAPI]
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     uint GetHitKind()
     {
         __target_switch
@@ -21603,7 +21729,7 @@ struct HitObject
     __glsl_extension(GL_NV_cluster_acceleration_structure)
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     int GetClusterID()
     {
         __target_switch
@@ -21721,6 +21847,7 @@ struct HitObject
         }
     }
 
+        /// LEGACY: Returns 4x3 world->object matrix. For DXR 1.3, use GetWorldToObject3x4() or GetWorldToObject4x3()
     [__requiresNVAPI]
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
@@ -21741,6 +21868,7 @@ struct HitObject
         }
     }
 
+        /// LEGACY: Returns 4x3 object->world matrix. For DXR 1.3, use GetObjectToWorld3x4() or GetObjectToWorld4x3()
     [__requiresNVAPI]
     __glsl_extension(GL_EXT_ray_tracing)
     [ForceInline]
@@ -21758,6 +21886,54 @@ struct HitObject
                 OpCapability ShaderInvocationReorderNV;
                 result:$$float4x3 = OpHitObjectGetObjectToWorldNV &this;
             };
+        }
+    }
+
+        /// DXR 1.3: Returns matrix for transforming object->world (3x4 layout)
+        /// Returns identity if not a hit
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    float3x4 GetObjectToWorld3x4()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetObjectToWorld3x4";
+        }
+    }
+
+        /// DXR 1.3: Returns matrix for transforming object->world (4x3 layout, transposed)
+        /// Returns identity if not a hit
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    float4x3 GetObjectToWorld4x3()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetObjectToWorld4x3";
+        }
+    }
+
+        /// DXR 1.3: Returns matrix for transforming world->object (3x4 layout)
+        /// Returns identity if not a hit
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    float3x4 GetWorldToObject3x4()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetWorldToObject3x4";
+        }
+    }
+
+        /// DXR 1.3: Returns matrix for transforming world->object (4x3 layout, transposed)
+        /// Returns identity if not a hit
+    [ForceInline]
+    [require(ser_dxr_1_3)]
+    float4x3 GetWorldToObject4x3()
+    {
+        __target_switch
+        {
+        case hlsl: __intrinsic_asm ".GetWorldToObject4x3";
         }
     }
 
@@ -21833,7 +22009,7 @@ struct HitObject
 
     /// Returns the attributes of a hit. Valid if the hit object represents a hit or a miss.
     [ForceInline]
-    [require(cuda_glsl_hlsl_spirv, ser_raygen_closesthit_miss)]
+    [require(ser_raygen_closesthit_miss)]
     attr_t GetAttributes<attr_t>()
     {
         __target_switch
@@ -22236,18 +22412,39 @@ struct HitObject
     }
 };
 
-    /// Reorders threads based on a coherence hint value. NumCoherenceHintBits indicates how many of
+// ============================================================================
+// DXR 1.3: dx namespace - Contains HitObject and MaybeReorderThread
+// ============================================================================
+
+    /// DXR 1.3 namespace: Contains HitObject type and MaybeReorderThread functions
+namespace dx
+{
+    /// DXR 1.3: HitObject type alias for global HitObject
+    typealias HitObject = ::HitObject;
+
+    // Note: MaybeReorderThread functions are also available in dx namespace via using directives
+    // Usage: dx::HitObject, dx::MaybeReorderThread(...)
+}
+
+// ============================================================================
+// LEGACY NVAPI: ReorderThread Functions (use MaybeReorderThread for DXR 1.3)
+// ============================================================================
+
+    /// LEGACY NVAPI: Reorders threads based on a coherence hint value. NumCoherenceHintBits indicates how many of
     /// the least significant bits of CoherenceHint should be considered during reordering (max: 16).
+    /// For DXR 1.3, use MaybeReorderThread() instead.
     /// Applications should set this to the lowest value required to represent all possible values in
     /// CoherenceHint. For best performance, all threads should provide the same value for
     /// NumCoherenceHintBits.
-    /// Where possible, reordering will also attempt to retain locality in the thread’s launch indices
+    /// Where possible, reordering will also attempt to retain locality in the thread's launch indices
     /// (DispatchRaysIndex in DXR).
 [__requiresNVAPI]
 __glsl_extension(GL_EXT_ray_tracing)
 __glsl_extension(GL_NV_shader_invocation_reorder)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, ser_raygen)]
+[require(ser_nvapi)]
+[require(ser_vulkan_nv)]
+[require(cuda)]
 void ReorderThread( uint CoherenceHint, uint NumCoherenceHintBitsFromLSB )
 {
     __target_switch
@@ -22265,8 +22462,9 @@ void ReorderThread( uint CoherenceHint, uint NumCoherenceHintBitsFromLSB )
     }
 }
 
-    /// Reorders threads based on a hit object, optionally extended by a coherence hint value. Coherence
-    /// hints behave as described in the generic variant of ReorderThread. The maximum number of
+    /// LEGACY NVAPI: Reorders threads based on a hit object, optionally extended by a coherence hint value.
+    /// For DXR 1.3, use MaybeReorderThread() instead.
+    /// Coherence hints behave as described in the generic variant of ReorderThread. The maximum number of
     /// coherence hint bits in this variant of ReorderThread is 8. If no coherence hint is desired, set
     /// NumCoherenceHitBits to zero.
     /// Reordering will consider information in the HitObject and coherence hint with the following
@@ -22285,7 +22483,9 @@ void ReorderThread( uint CoherenceHint, uint NumCoherenceHintBitsFromLSB )
 __glsl_extension(GL_EXT_ray_tracing)
 __glsl_extension(GL_NV_shader_invocation_reorder)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, ser_raygen)]
+[require(ser_nvapi)]
+[require(ser_vulkan_nv)]
+[require(cuda)]
 void ReorderThread( HitObject HitOrMiss, uint CoherenceHint, uint NumCoherenceHintBitsFromLSB )
 {
     __target_switch
@@ -22303,6 +22503,8 @@ void ReorderThread( HitObject HitOrMiss, uint CoherenceHint, uint NumCoherenceHi
     }
 }
 
+    // LEGACY NVAPI: Reorders based on HitObject only (no coherence hint)
+    // For DXR 1.3, use MaybeReorderThread() instead.
     // Is equivalent to
     // ```
     // void ReorderThread( HitObject HitOrMiss, uint CoherenceHint, uint NumCoherenceHintBitsFromLSB );
@@ -22313,7 +22515,9 @@ void ReorderThread( HitObject HitOrMiss, uint CoherenceHint, uint NumCoherenceHi
 __glsl_extension(GL_EXT_ray_tracing)
 __glsl_extension(GL_NV_shader_invocation_reorder)
 [ForceInline]
-[require(cuda_glsl_hlsl_spirv, ser_raygen)]
+[require(ser_nvapi)]
+[require(ser_vulkan_nv)]
+[require(cuda)]
 void ReorderThread( HitObject HitOrMiss )
 {
     __target_switch
@@ -22328,6 +22532,51 @@ void ReorderThread( HitObject HitOrMiss )
             OpCapability ShaderInvocationReorderNV;
             OpReorderThreadWithHitObjectNV &HitOrMiss;
         };
+    }
+}
+
+// ============================================================================
+// DXR 1.3: MaybeReorderThread - Thread Reordering Functions
+// ============================================================================
+
+    /// DXR 1.3: Reorder threads based on HitObject for coherence
+    /// Available ONLY in raygeneration shaders
+[ForceInline]
+[require(ser_dxr_1_3)]
+void MaybeReorderThread(HitObject Hit)
+{
+    __target_switch
+    {
+    case hlsl: __intrinsic_asm "MaybeReorderThread($0)";
+    }
+}
+
+    /// DXR 1.3: Reorder threads based on coherence hint
+    /// Available ONLY in raygeneration shaders
+[ForceInline]
+[require(ser_dxr_1_3)]
+void MaybeReorderThread(
+    uint CoherenceHint,
+    uint NumCoherenceHintBitsFromLSB)
+{
+    __target_switch
+    {
+    case hlsl: __intrinsic_asm "MaybeReorderThread($0, $1)";
+    }
+}
+
+    /// DXR 1.3: Reorder threads based on both HitObject and coherence hint
+    /// Available ONLY in raygeneration shaders
+[ForceInline]
+[require(ser_dxr_1_3)]
+void MaybeReorderThread(
+    HitObject Hit,
+    uint CoherenceHint,
+    uint NumCoherenceHintBitsFromLSB)
+{
+    __target_switch
+    {
+    case hlsl: __intrinsic_asm "MaybeReorderThread($0, $1, $2)";
     }
 }
 
