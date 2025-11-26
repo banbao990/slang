@@ -83,6 +83,13 @@ void buildEntryPointReferenceGraph(
         for (UInt i = 0; i < inst->getOperandCount(); i++)
         {
             auto operand = inst->getOperand(i);
+            if (!operand)
+            {
+                std::cout << "[" << __FILE__ << "::" << __LINE__ << "] "
+                          << "Null operand in inst: ";
+                inst->dump();
+                continue;
+            }
             switch (operand->getOp())
             {
             case kIROp_GlobalParam:

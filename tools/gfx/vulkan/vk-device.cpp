@@ -493,8 +493,8 @@ Result DeviceImpl::initVulkanInstanceAndDevice(
         deviceFeatures2.pNext = &extendedFeatures.variablePointersFeatures;
 
         // Compute shader derivative features.
-        extendedFeatures.computeShaderDerivativeFeatures.pNext = deviceFeatures2.pNext;
-        deviceFeatures2.pNext = &extendedFeatures.computeShaderDerivativeFeatures;
+        // extendedFeatures.computeShaderDerivativeFeatures.pNext = deviceFeatures2.pNext;
+        // deviceFeatures2.pNext = &extendedFeatures.computeShaderDerivativeFeatures;
 
         // Extended dynamic states
         extendedFeatures.extendedDynamicStateFeatures.pNext = deviceFeatures2.pNext;
@@ -513,8 +513,8 @@ Result DeviceImpl::initVulkanInstanceAndDevice(
         deviceFeatures2.pNext = &extendedFeatures.clockFeatures;
 
         // cooperative vector features
-        extendedFeatures.cooperativeVectorFeatures.pNext = deviceFeatures2.pNext;
-        deviceFeatures2.pNext = &extendedFeatures.cooperativeVectorFeatures;
+        // extendedFeatures.cooperativeVectorFeatures.pNext = deviceFeatures2.pNext;
+        // deviceFeatures2.pNext = &extendedFeatures.cooperativeVectorFeatures;
 
         // Atomic Float
         // To detect atomic float we need
@@ -714,11 +714,11 @@ Result DeviceImpl::initVulkanInstanceAndDevice(
             VK_KHR_VARIABLE_POINTERS_EXTENSION_NAME,
             "variable-pointer");
 
-        SIMPLE_EXTENSION_FEATURE(
-            extendedFeatures.computeShaderDerivativeFeatures,
-            computeDerivativeGroupLinear,
-            VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME,
-            "computeDerivativeGroupLinear");
+        // SIMPLE_EXTENSION_FEATURE(
+            // extendedFeatures.computeShaderDerivativeFeatures,
+            // computeDerivativeGroupLinear,
+            // VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME,
+            // "computeDerivativeGroupLinear");
 
         // Only enable raytracing validation if both requested and supported
         if (enableRayTracingValidation &&
