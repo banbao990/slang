@@ -496,6 +496,10 @@ Result DeviceImpl::initVulkanInstanceAndDevice(
         // extendedFeatures.computeShaderDerivativeFeatures.pNext = deviceFeatures2.pNext;
         // deviceFeatures2.pNext = &extendedFeatures.computeShaderDerivativeFeatures;
 
+        // Maximal reconvergence features.
+        extendedFeatures.maximalReconvergenceFeatures.pNext = deviceFeatures2.pNext;
+        deviceFeatures2.pNext = &extendedFeatures.maximalReconvergenceFeatures;
+
         // Extended dynamic states
         extendedFeatures.extendedDynamicStateFeatures.pNext = deviceFeatures2.pNext;
         deviceFeatures2.pNext = &extendedFeatures.extendedDynamicStateFeatures;
@@ -714,6 +718,12 @@ Result DeviceImpl::initVulkanInstanceAndDevice(
             VK_KHR_VARIABLE_POINTERS_EXTENSION_NAME,
             "variable-pointer");
 
+        SIMPLE_EXTENSION_FEATURE(
+            extendedFeatures.maximalReconvergenceFeatures,
+            shaderMaximalReconvergence,
+            VK_KHR_SHADER_MAXIMAL_RECONVERGENCE_EXTENSION_NAME,
+            "maximal-reconvergence");
+
         // SIMPLE_EXTENSION_FEATURE(
             // extendedFeatures.computeShaderDerivativeFeatures,
             // computeDerivativeGroupLinear,
@@ -731,11 +741,11 @@ Result DeviceImpl::initVulkanInstanceAndDevice(
                 "ray-tracing-validation");
         }
 
-        SIMPLE_EXTENSION_FEATURE(
-            extendedFeatures.cooperativeVectorFeatures,
-            cooperativeVector,
-            VK_NV_COOPERATIVE_VECTOR_EXTENSION_NAME,
-            "cooperative-vector");
+        //SIMPLE_EXTENSION_FEATURE(
+        //    extendedFeatures.cooperativeVectorFeatures,
+        //    cooperativeVector,
+        //    VK_NV_COOPERATIVE_VECTOR_EXTENSION_NAME,
+        //    "cooperative-vector");
 
 #undef SIMPLE_EXTENSION_FEATURE
 
